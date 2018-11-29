@@ -4,9 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/dschowta/lite.tsdb"
-
 	"github.com/cisco/senml"
+	"github.com/dschowta/lite.tsdb"
 )
 
 type SenmlDataStore struct {
