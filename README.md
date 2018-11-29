@@ -1,2 +1,2 @@
 # senml.datastore
-A Senml (Sensor measurement List) store implementation to store the senml data in a time series database
+A datastore to keep SenML (Sensor Measurement Lists based on [RFC8428](https://tools.ietf.org/html/rfc8428))  data in the filesystem.
