@@ -7,13 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dschowta/lite.tsdb"
-
 	"github.com/cisco/senml"
 )
 
 var filePath = "./testDb"
-var datastore SenmlDataStore
+var datastore *SenmlDataStore
 
 func TestMain(m *testing.M) {
 	setup_Test()
@@ -24,11 +22,8 @@ func TestMain(m *testing.M) {
 
 func setup_Test() {
 	var err error
-	datastore, err = NewSenmlDataStore(tsdb.BOLTDB)
-	if err != nil {
-		fmt.Printf("Unable to create senmlDataStore instance")
-		os.Exit(1)
-	}
+	datastore = new(SenmlDataStore)
+
 	err = datastore.Connect(filePath)
 	if err != nil {
 		fmt.Printf("Unable to open the boltDB:%s", err)

@@ -23,19 +23,15 @@ type SenMLDBRecord struct {
 	Sum *float64 `json:"s,omitempty" `
 }
 
-func NewSenmlDataStore(storage int) (SenmlDataStore, error) {
-	senmlDatastore := SenmlDataStore{}
-	tsdb, err := tsdb.NewTSDB(storage)
-	senmlDatastore.tsdb = tsdb
-	return senmlDatastore, err
-}
-
-func (bdb SenmlDataStore) Connect(path string) error {
-	return bdb.tsdb.Connect(path)
+func (bdb *SenmlDataStore) Connect(path string) error {
+	config := tsdb.BoltDBConfig{Path: path}
+	var err error
+	bdb.tsdb, err = tsdb.Open(config)
+	return err
 }
 
 func (bdb SenmlDataStore) Disconnect() error {
-	return bdb.tsdb.Disconnect()
+	return bdb.tsdb.Close()
 }
 func NewBoltSenMLRecord(record senml.SenMLRecord) SenMLDBRecord {
 	return SenMLDBRecord{
