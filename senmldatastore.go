@@ -8,8 +8,28 @@ import (
 	"github.com/dschowta/lite.tsdb"
 )
 
+const (
+	ASC  = "asc"
+	DESC = "desc"
+)
+
 type SenmlDataStore struct {
 	tsdb tsdb.TSDB
+}
+
+type Query struct {
+	Series string
+
+	Start float64
+	End   float64
+	//Sorting order:
+	//Possible values are ASC and DESC
+	//ASC : The time Series will have the oldest data first
+	//DESC: The time Series will have the latest  data first.
+	Sort string
+
+	//Number of entries to be returned per request. This is used for pagination. The next sequence is found out using NextEntry function
+	Limit int
 }
 
 type SenMLDBRecord struct {
@@ -117,6 +137,61 @@ func (bdb SenmlDataStore) Get(series string) (senml.SenML, error) {
 	err := <-errCh
 
 	return senmlPack, err
+}
+
+//Query the data store for a particular range. This gives the response in multiple pages
+func (bdb SenmlDataStore) Query(query Query) (senml.SenML, *float64, error) {
+	var senmlPack senml.SenML
+	tsQuery := tsdb.Query{
+		Limit:  query.Limit,
+		Series: query.Series,
+		Sort:   query.Sort,
+		End:    floatTimeToInt64(query.End),
+		Start:  floatTimeToInt64(query.Start),
+	}
+	timeSeriesCh, nextEntryCh, errCh := bdb.tsdb.QueryOnChannel(tsQuery)
+
+	//Check the data channel
+	for timeEntry := range timeSeriesCh {
+		var timeRecord SenMLDBRecord
+		err := json.Unmarshal(timeEntry.Value, &timeRecord)
+		if err != nil {
+			fmt.Printf("Error while unmarshalling %s", err)
+			continue
+		}
+		senmlPack.Records = append(senmlPack.Records, newSenMLRecord(int64ToFloatTime(timeEntry.Time), query.Series, timeRecord))
+	}
+	//Check the error channel
+	nextEntry := <-nextEntryCh
+	err := <-errCh
+
+	if nextEntry != nil {
+		nextEntryf := int64ToFloatTime(*nextEntry)
+		return senmlPack, &nextEntryf, err
+	} else {
+		return senmlPack, nil, err
+	}
+}
+
+func (bdb SenmlDataStore) GetPages(query Query) ([]float64, int, error) {
+	tsQuery := tsdb.Query{
+		Limit:  query.Limit,
+		Series: query.Series,
+		Sort:   query.Sort,
+		End:    floatTimeToInt64(query.End),
+		Start:  floatTimeToInt64(query.Start),
+	}
+	pages, count, err := bdb.tsdb.GetPages(tsQuery)
+
+	if err != nil {
+		return nil, 0, err
+	}
+	fpages := make([]float64, 0, len(pages))
+	for _, page := range pages {
+		fpages = append(fpages, int64ToFloatTime(page))
+	}
+
+	return fpages, count, nil
 }
 
 func (bdb *SenmlDataStore) Delete(series string) error {

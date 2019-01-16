@@ -10,40 +10,38 @@ import (
 	"github.com/cisco/senml"
 )
 
-var filePath = "./testDb"
-var datastore *SenmlDataStore
+func setupDatastore(dbName string) (*SenmlDataStore, string, error) {
+	os_temp := strings.Replace(os.TempDir(), "\\", "/", -1)
+	temp_file := fmt.Sprintf("%s/hds-test/%s", os_temp, dbName)
+	datastore := new(SenmlDataStore)
 
-func TestMain(m *testing.M) {
-	setup_Test()
-	retCode := m.Run()
-	teardown_Test()
-	os.Exit(retCode)
-}
-
-func setup_Test() {
-	var err error
-	datastore = new(SenmlDataStore)
-
-	err = datastore.Connect(filePath)
+	err := datastore.Connect(temp_file)
 	if err != nil {
-		fmt.Printf("Unable to open the boltDB:%s", err)
-		os.Exit(1)
+		return nil, temp_file, err
 	}
+	return datastore, temp_file, nil
 }
 
-func teardown_Test() {
-	datastore.Disconnect()
-	err := os.Remove(filePath)
+func clean(ds *SenmlDataStore, temp_filepath string) {
+	ds.Disconnect()
+	err := os.Remove(temp_filepath)
 	if err != nil {
-		fmt.Printf("Unable to delete the boltDB:%s", err)
-		os.Exit(1)
+		fmt.Println(err.Error())
 	}
 }
 
 //TODO : Check whether a newly entered data will be sorted or not
 
 func TestDataStore_Add(t *testing.T) {
-	s := dummyRecords_same_name_same_types(10, "TestDataStore_Add", false)
+	tname := "TestDataStore_Add"
+	datastore, filePath, err := setupDatastore(tname)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	defer clean(datastore, filePath)
+
+	s := dummyRecords_same_name_same_types(10, tname, false)
 	datastore.Add(s)
 	s_normalized := senml.Normalize(s)
 	seriesName := s_normalized.Records[0].Name
@@ -51,24 +49,31 @@ func TestDataStore_Add(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	arr, err := senml.Encode(s2, senml.JSON, senml.OutputOptions{PrettyPrint: true})
+	_, err = senml.Encode(s2, senml.JSON, senml.OutputOptions{PrettyPrint: true})
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println(string(arr))
+	//fmt.Println(string(arr))
 
-	if CompareSenml(s_normalized, s2) == false {
+	if compareSenml(s_normalized, s2) == false {
 		t.Error("Inserted and fetched senml did not match")
 	}
 }
 
 func TestDataStore_Add_and_Check_Sorted(t *testing.T) {
-	s := dummyRecords_same_name_same_types(10, "TestDataStore_Add_and_Check_Sorted", true)
+	tname := "TestDataStore_Add_and_Check_Sorted"
+	datastore, filePath, err := setupDatastore(tname)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	defer clean(datastore, filePath)
+	s := dummyRecords_same_name_same_types(10, tname, true)
 	datastore.Add(s)
 	s_normalized := senml.Normalize(s)
 
-	fmt.Println("Created:")
-	printJson(t, s_normalized)
+	//fmt.Println("Created:")
+	//printJson(t, s_normalized)
 
 	seriesName := s_normalized.Records[0].Name
 	s2, err := datastore.Get(seriesName)
@@ -76,18 +81,18 @@ func TestDataStore_Add_and_Check_Sorted(t *testing.T) {
 		t.Error(err)
 	}
 
-	fmt.Println("Got Back:")
-	printJson(t, s2)
+	//fmt.Println("Got Back:")
+	//printJson(t, s2)
 
-	if CompareSenml(s_normalized, s2) == true {
+	if compareSenml(s_normalized, s2) == true {
 		t.Error("Inserted and fetched senml was not supposed to match (sorted vs unsorted) ")
 	}
 	s_sorted := senml.Normalize(dummyRecords_same_name_same_types(10, "TestDataStore_Add_and_Check_Sorted", false))
 
-	fmt.Println("sorted")
-	printJson(t, s_sorted)
+	//fmt.Println("sorted")
+	//printJson(t, s_sorted)
 
-	if CompareSenml(s_sorted, s2) == false {
+	if compareSenml(s_sorted, s2) == false {
 		t.Error("Sorted senml should have matched!!")
 	}
 }
@@ -100,10 +105,17 @@ func printJson(t *testing.T, ml senml.SenML) {
 	fmt.Println(string(arr))
 }
 func TestDataStore_remove(t *testing.T) {
+	tname := "TestDataStore_remove"
+	datastore, filePath, err := setupDatastore(tname)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	defer clean(datastore, filePath)
 	s := dummyRecords_diff_name_diff_types()
 	datastore.Add(s)
 	seriesName := senml.Normalize(s).Records[0].Name
-	_, err := datastore.Get(seriesName)
+	_, err = datastore.Get(seriesName)
 	if err != nil {
 		t.Error(err)
 	}
@@ -118,6 +130,96 @@ func TestDataStore_remove(t *testing.T) {
 	_, err = datastore.Get(seriesName)
 	if err == nil {
 		t.Error("Could fetch a deleted data")
+	}
+}
+
+func TestSenmlDataStore_QueryPages(t *testing.T) {
+	tname := "TestSenmlDataStore_QueryPages"
+	datastore, filePath, err := setupDatastore(tname)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	defer clean(datastore, filePath)
+
+	s := dummyRecords_same_name_same_types(100, tname, false)
+
+	s_normalized := senml.Normalize(s)
+	seriesName := s_normalized.Records[0].Name
+
+	limit := 25
+	count := 100
+	err = datastore.Add(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	query := Query{Series: seriesName, Limit: limit, Start: s.Records[0].Time, End: s.Records[len(s.Records)-1].Time, Sort: ASC}
+	pages, retCount, err := datastore.GetPages(query)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if retCount != count {
+		t.Errorf("Length of time series do not match, returned=%d, expected %d", retCount, count)
+	}
+
+	if len(pages) != count/limit {
+		t.Error("Number of pages is not as expected")
+	}
+
+	for i := 0; i < count/limit; i = i + 1 {
+		if math.Abs(pages[i]-s.Records[i*limit].Time) > 1e-6 {
+			t.Errorf("Page indices are not matching %v != %v", pages[i], s.Records[i*limit].Time)
+		}
+	}
+}
+
+func TestSenmlDataStore_Query(t *testing.T) {
+	tname := "TestSenmlDataStore_Query"
+	datastore, filePath, err := setupDatastore(tname)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	defer clean(datastore, filePath)
+
+	s := dummyRecords_same_name_same_types(100, tname, false)
+	s_normalized := senml.Normalize(s)
+	seriesName := s_normalized.Records[0].Name
+
+	err = datastore.Add(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	query := Query{Series: seriesName, Limit: 50, Start: s.Records[0].Time, End: s.Records[len(s.Records)-1].Time, Sort: ASC}
+	resSeries, nextEntry, err := datastore.Query(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firsthalf := senml.SenML{Records: s_normalized.Records[0:50]}
+	if compareSenml(resSeries, firsthalf) == false {
+		t.Error("First page entries did not match")
+	}
+
+	if nextEntry == nil {
+		t.Error("nextEntry is null")
+	}
+	query = Query{Series: seriesName, Limit: 50, Start: *nextEntry, End: s.Records[len(s.Records)-1].Time, Sort: ASC}
+	resSeries, nextEntry, err = datastore.Query(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	secondhalf := senml.SenML{Records: s_normalized.Records[50:100]}
+	if compareSenml(resSeries, secondhalf) == false {
+		t.Error("Second page entries did not match")
+	}
+
+	if nextEntry != nil {
+		t.Error("nextEntry is null")
 	}
 }
 
@@ -142,7 +244,7 @@ func dummyRecords_diff_name_diff_types() senml.SenML {
 	return s
 }
 
-func CompareSenml(s1 senml.SenML, s2 senml.SenML) bool {
+func compareSenml(s1 senml.SenML, s2 senml.SenML) bool {
 	recordLen := len(s1.Records)
 	for i := 0; i < recordLen; i++ {
 		r1 := s1.Records[i]
