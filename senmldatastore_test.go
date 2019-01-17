@@ -11,8 +11,7 @@ import (
 )
 
 func setupDatastore(dbName string) (*SenmlDataStore, string, error) {
-	os_temp := strings.Replace(os.TempDir(), "\\", "/", -1)
-	temp_file := fmt.Sprintf("%s/hds-test/%s", os_temp, dbName)
+	temp_file := fmt.Sprintf("senml_test_temp_%s", dbName)
 	datastore := new(SenmlDataStore)
 
 	err := datastore.Connect(temp_file)
