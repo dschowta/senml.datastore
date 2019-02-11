@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/cisco/senml"
-	"github.com/dschowta/lite.tsdb"
+	tsdb "github.com/dschowta/lite.tsdb"
+	"github.com/farshidtz/senml"
 )
 
 const (
@@ -53,7 +53,7 @@ func (bdb *SenmlDataStore) Connect(path string) error {
 func (bdb SenmlDataStore) Disconnect() error {
 	return bdb.tsdb.Close()
 }
-func NewBoltSenMLRecord(record senml.SenMLRecord) SenMLDBRecord {
+func NewBoltSenMLRecord(record senml.Record) SenMLDBRecord {
 	return SenMLDBRecord{
 		record.Unit,
 		record.UpdateTime,
@@ -65,8 +65,8 @@ func NewBoltSenMLRecord(record senml.SenMLRecord) SenMLDBRecord {
 	}
 }
 
-func newSenMLRecord(time float64, name string, record SenMLDBRecord) senml.SenMLRecord {
-	return senml.SenMLRecord{
+func newSenMLRecord(time float64, name string, record SenMLDBRecord) senml.Record {
+	return senml.Record{
 		Name:        name,
 		Unit:        record.Unit,
 		Time:        time,
@@ -89,19 +89,19 @@ func floatTimeToInt64(senmlTime float64) int64 {
 func int64ToFloatTime(timeVal int64) float64 {
 	return float64(timeVal) / 1e9
 }
-func (bdb SenmlDataStore) Add(senmlPack senml.SenML) error {
+func (bdb SenmlDataStore) Add(senmlPack senml.Pack) error {
 
 	// Fill the data map with provided data points
-	records := senml.Normalize(senmlPack).Records
+	pack := senmlPack.Normalize()
 
 	seriesMap := make(map[string][]tsdb.TimeEntry)
-	for _, r := range records {
+	for _, r := range pack {
 		if "" != r.Name {
-			byte, err := json.Marshal(NewBoltSenMLRecord(r))
+			b, err := json.Marshal(NewBoltSenMLRecord(r))
 			if err != nil {
 				return err
 			}
-			entry := tsdb.TimeEntry{floatTimeToInt64(r.Time), byte}
+			entry := tsdb.TimeEntry{floatTimeToInt64(r.Time), b}
 
 			seriesMap[r.Name] = append(seriesMap[r.Name], entry)
 		} else {
@@ -119,8 +119,8 @@ func (bdb SenmlDataStore) Add(senmlPack senml.SenML) error {
 	return nil
 }
 
-func (bdb SenmlDataStore) Get(series string) (senml.SenML, error) {
-	var senmlPack senml.SenML
+func (bdb SenmlDataStore) Get(series string) (senml.Pack, error) {
+	var senmlPack senml.Pack
 	timeSeriesCh, errCh := bdb.tsdb.GetOnChannel(series)
 
 	//Check the data channel
@@ -131,7 +131,7 @@ func (bdb SenmlDataStore) Get(series string) (senml.SenML, error) {
 			fmt.Printf("Error while unmarshalling %s", err)
 			continue
 		}
-		senmlPack.Records = append(senmlPack.Records, newSenMLRecord(int64ToFloatTime(timeEntry.Time), series, timeRecord))
+		senmlPack = append(senmlPack, newSenMLRecord(int64ToFloatTime(timeEntry.Time), series, timeRecord))
 	}
 	//Check the error channel
 	err := <-errCh
@@ -140,8 +140,8 @@ func (bdb SenmlDataStore) Get(series string) (senml.SenML, error) {
 }
 
 //Query the data store for a particular range. This gives the response in multiple pages
-func (bdb SenmlDataStore) Query(query Query) (senml.SenML, *float64, error) {
-	var senmlPack senml.SenML
+func (bdb SenmlDataStore) Query(query Query) (senml.Pack, *float64, error) {
+	var senmlPack senml.Pack
 	tsQuery := tsdb.Query{
 		Limit:  query.Limit,
 		Series: query.Series,
@@ -159,7 +159,7 @@ func (bdb SenmlDataStore) Query(query Query) (senml.SenML, *float64, error) {
 			fmt.Printf("Error while unmarshalling %s", err)
 			continue
 		}
-		senmlPack.Records = append(senmlPack.Records, newSenMLRecord(int64ToFloatTime(timeEntry.Time), query.Series, timeRecord))
+		senmlPack = append(senmlPack, newSenMLRecord(int64ToFloatTime(timeEntry.Time), query.Series, timeRecord))
 	}
 	//Check the error channel
 	nextEntry := <-nextEntryCh
