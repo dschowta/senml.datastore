@@ -3,6 +3,7 @@ package datastore
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	tsdb "github.com/dschowta/lite.tsdb"
 	"github.com/farshidtz/senml"
@@ -18,6 +19,7 @@ type SenmlDataStore struct {
 }
 
 type Query struct {
+	//A comma separated senml names
 	Series string
 
 	Start float64
@@ -77,6 +79,17 @@ func newSenMLRecord(time float64, name string, record SenMLDBRecord) senml.Recor
 		BoolValue:   record.BoolValue,
 		Sum:         record.Sum,
 	}
+}
+
+func ToSenmlTime(t time.Time) float64 {
+	if t.IsZero() {
+		return 0
+	}
+	return int64ToFloatTime(t.UnixNano())
+}
+
+func FromSenmlTime(t float64) time.Time {
+	return time.Unix(0, floatTimeToInt64(t))
 }
 
 //This function converts a floating point number (which is supported by senml) to a bytearray
@@ -195,5 +208,9 @@ func (bdb SenmlDataStore) GetPages(query Query) ([]float64, int, error) {
 }
 
 func (bdb *SenmlDataStore) Delete(series string) error {
-	return bdb.tsdb.Delete(series)
+	err := bdb.tsdb.Delete(series)
+	if err == tsdb.ErrSeriesNotFound {
+		err = ErrSeriesNotFound
+	}
+	return err
 }
