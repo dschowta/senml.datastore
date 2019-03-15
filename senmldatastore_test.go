@@ -231,7 +231,7 @@ func TestSenmlDataStore_Query(t *testing.T) {
 	}
 
 	if nextEntry != nil {
-		t.Error("nextEntry is null")
+		t.Error("nextEntry is not null")
 	}
 }
 
