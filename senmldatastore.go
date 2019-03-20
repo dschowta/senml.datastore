@@ -72,7 +72,7 @@ func newSenMLRecord(time float64, name string, record SenMLDBRecord) senml.Recor
 		Name:        name,
 		Unit:        record.Unit,
 		Time:        time,
-		UpdateTime:  time,
+		UpdateTime:  record.UpdateTime,
 		Value:       record.Value,
 		StringValue: record.StringValue,
 		DataValue:   record.DataValue,
