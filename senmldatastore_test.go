@@ -166,7 +166,7 @@ func TestSenmlDataStore_QueryPages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	query := Query{Series: seriesName, MaxEntries: limit, Start: s[0].Time, End: s[len(s)-1].Time, Sort: ASC}
+	query := Query{Series: seriesName, MaxEntries: limit, From: s[0].Time, To: s[len(s)-1].Time, Sort: ASC}
 	pages, retCount, err := datastore.GetPages(query)
 	if err != nil {
 		t.Error(err)
@@ -205,7 +205,7 @@ func TestSenmlDataStore_Query(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	query := Query{Series: seriesName, MaxEntries: 50, Start: s[0].Time, End: s[len(s)-1].Time, Sort: ASC}
+	query := Query{Series: seriesName, MaxEntries: 50, From: s[0].Time, To: s[len(s)-1].Time, Sort: ASC}
 	resSeries, nextEntry, err := datastore.Query(query)
 	if err != nil {
 		t.Fatal(err)
@@ -219,7 +219,7 @@ func TestSenmlDataStore_Query(t *testing.T) {
 	if nextEntry == nil {
 		t.Error("nextEntry is null")
 	}
-	query = Query{Series: seriesName, MaxEntries: 50, Start: *nextEntry, End: s[len(s)-1].Time, Sort: ASC}
+	query = Query{Series: seriesName, MaxEntries: 50, From: *nextEntry, To: s[len(s)-1].Time, Sort: ASC}
 	resSeries, nextEntry, err = datastore.Query(query)
 	if err != nil {
 		t.Fatal(err)

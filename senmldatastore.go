@@ -22,8 +22,8 @@ type Query struct {
 	//A comma separated senml names
 	Series string
 
-	Start float64
-	End   float64
+	From float64
+	To   float64
 	//Sorting order:
 	//Possible values are ASC and DESC
 	//ASC : The time Series will have the oldest data first
@@ -159,8 +159,8 @@ func (bdb SenmlDataStore) Query(query Query) (senml.Pack, *float64, error) {
 		MaxEntries: query.MaxEntries,
 		Series:     query.Series,
 		Sort:       query.Sort,
-		End:        floatTimeToInt64(query.End),
-		Start:      floatTimeToInt64(query.Start),
+		To:         floatTimeToInt64(query.To),
+		From:       floatTimeToInt64(query.From),
 	}
 	timeSeriesCh, nextEntryCh, errCh := bdb.tsdb.QueryOnChannel(tsQuery)
 
@@ -191,8 +191,8 @@ func (bdb SenmlDataStore) GetPages(query Query) ([]float64, int, error) {
 		MaxEntries: query.MaxEntries,
 		Series:     query.Series,
 		Sort:       query.Sort,
-		End:        floatTimeToInt64(query.End),
-		Start:      floatTimeToInt64(query.Start),
+		To:         floatTimeToInt64(query.To),
+		From:       floatTimeToInt64(query.From),
 	}
 	pages, count, err := bdb.tsdb.GetPages(tsQuery)
 
