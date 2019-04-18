@@ -65,6 +65,26 @@ func TestDataStore_Add(t *testing.T) {
 	}
 }
 
+func TestSenmlDataStore_Create(t *testing.T) {
+	tname := "TestDataStore_Create"
+	datastore, filePath, err := setupDatastore(tname)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	defer clean(datastore, filePath)
+
+	err = datastore.Create(tname)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	err = datastore.Create(tname)
+	if err == nil {
+		t.Error("Duplicate Buckets are allowed")
+	}
+}
+
 func TestDataStore_Add_and_Check_Sorted(t *testing.T) {
 	tname := "TestDataStore_Add_and_Check_Sorted"
 	datastore, filePath, err := setupDatastore(tname)
