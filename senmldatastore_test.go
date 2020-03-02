@@ -225,7 +225,7 @@ func TestSenmlDataStore_Query(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	query := Query{Series: seriesName, MaxEntries: 50, From: s[0].Time, To: s[len(s)-1].Time, Sort: ASC}
+	query := Query{Series: seriesName, MaxEntries: 50, From: s[0].Time, To: s[len(s)-1].Time, Sort: ASC, Resolved: true}
 	resSeries, nextEntry, err := datastore.Query(query)
 	if err != nil {
 		t.Fatal(err)
@@ -239,7 +239,7 @@ func TestSenmlDataStore_Query(t *testing.T) {
 	if nextEntry == nil {
 		t.Error("nextEntry is null")
 	}
-	query = Query{Series: seriesName, MaxEntries: 50, From: *nextEntry, To: s[len(s)-1].Time, Sort: ASC}
+	query = Query{Series: seriesName, MaxEntries: 50, From: *nextEntry, To: s[len(s)-1].Time, Sort: ASC, Resolved: true}
 	resSeries, nextEntry, err = datastore.Query(query)
 	if err != nil {
 		t.Fatal(err)
@@ -247,6 +247,57 @@ func TestSenmlDataStore_Query(t *testing.T) {
 
 	secondhalf := s_normalized[50:100]
 	if compareSenml(resSeries, secondhalf) == false {
+		t.Error("Second page entries did not match")
+	}
+
+	if nextEntry != nil {
+		t.Error("nextEntry is not null")
+	}
+}
+
+func TestSenmlDataStore_Query_not_resolved(t *testing.T) {
+	tname := "TestSenmlDataStore_Query"
+	datastore, filePath, err := setupDatastore(tname)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	defer clean(datastore, filePath)
+
+	s := dummyRecords_same_name_same_types(100, tname, false)
+	s_normalized := s.Normalize()
+	seriesName := s_normalized[0].Name
+
+	err = datastore.Add(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	query := Query{Series: seriesName, MaxEntries: 50, From: s[0].Time, To: s[len(s)-1].Time, Sort: ASC, Resolved: false}
+	resSeries, nextEntry, err := datastore.Query(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firsthalf := s_normalized[0:50]
+	resseries_normalized := resSeries.Normalize()
+	if compareSenml(resseries_normalized, firsthalf) == false {
+		t.Error("First page entries did not match")
+	}
+
+	if nextEntry == nil {
+		t.Error("nextEntry is null")
+	}
+	query = Query{Series: seriesName, MaxEntries: 50, From: *nextEntry, To: s[len(s)-1].Time, Sort: ASC, Resolved: false}
+	resSeries, nextEntry, err = datastore.Query(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resSeries.Normalize()
+	secondhalf := s_normalized[50:100]
+	resseries_normalized = resSeries.Normalize()
+	if compareSenml(resseries_normalized, secondhalf) == false {
 		t.Error("Second page entries did not match")
 	}
 

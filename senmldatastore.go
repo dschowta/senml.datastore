@@ -32,6 +32,9 @@ type Query struct {
 
 	//Number of entries to be returned per request. This is used for pagination. The next sequence is found out using NextEntry function
 	MaxEntries int
+
+	//If set to true, then the query result shall be resolved (normalized) senml see https://tools.ietf.org/html/rfc8428#section-4.6
+	Resolved bool
 }
 
 type SenMLDBRecord struct {
@@ -64,20 +67,6 @@ func NewBoltSenMLRecord(record senml.Record) SenMLDBRecord {
 		record.DataValue,
 		record.BoolValue,
 		record.Sum,
-	}
-}
-
-func newSenMLRecord(time float64, name string, record SenMLDBRecord) senml.Record {
-	return senml.Record{
-		Name:        name,
-		Unit:        record.Unit,
-		Time:        time,
-		UpdateTime:  record.UpdateTime,
-		Value:       record.Value,
-		StringValue: record.StringValue,
-		DataValue:   record.DataValue,
-		BoolValue:   record.BoolValue,
-		Sum:         record.Sum,
 	}
 }
 
@@ -142,16 +131,7 @@ func (bdb SenmlDataStore) Get(series string) (senml.Pack, error) {
 	var senmlPack senml.Pack
 	timeSeriesCh, errCh := bdb.tsdb.GetOnChannel(series)
 
-	//Check the data channel
-	for timeEntry := range timeSeriesCh {
-		var timeRecord SenMLDBRecord
-		err := json.Unmarshal(timeEntry.Value, &timeRecord)
-		if err != nil {
-			fmt.Printf("Error while unmarshalling %s", err)
-			continue
-		}
-		senmlPack = append(senmlPack, newSenMLRecord(int64ToFloatTime(timeEntry.Time), series, timeRecord))
-	}
+	senmlPack = iterateOverChannel(timeSeriesCh, true, series)
 	//Check the error channel
 	err := <-errCh
 
@@ -161,6 +141,7 @@ func (bdb SenmlDataStore) Get(series string) (senml.Pack, error) {
 //Query the data store for a particular range. This gives the response in multiple pages
 func (bdb SenmlDataStore) Query(query Query) (senml.Pack, *float64, error) {
 	var senmlPack senml.Pack
+
 	tsQuery := tsdb.Query{
 		MaxEntries: query.MaxEntries,
 		Series:     query.Series,
@@ -168,18 +149,11 @@ func (bdb SenmlDataStore) Query(query Query) (senml.Pack, *float64, error) {
 		To:         floatTimeToInt64(query.To),
 		From:       floatTimeToInt64(query.From),
 	}
+
+	resolved := query.Resolved
 	timeSeriesCh, nextEntryCh, errCh := bdb.tsdb.QueryOnChannel(tsQuery)
 
-	//Check the data channel
-	for timeEntry := range timeSeriesCh {
-		var timeRecord SenMLDBRecord
-		err := json.Unmarshal(timeEntry.Value, &timeRecord)
-		if err != nil {
-			fmt.Printf("Error while unmarshalling %s", err)
-			continue
-		}
-		senmlPack = append(senmlPack, newSenMLRecord(int64ToFloatTime(timeEntry.Time), query.Series, timeRecord))
-	}
+	senmlPack = iterateOverChannel(timeSeriesCh, resolved, query.Series)
 	//Check the error channel
 	nextEntry := <-nextEntryCh
 	err := <-errCh
@@ -190,6 +164,59 @@ func (bdb SenmlDataStore) Query(query Query) (senml.Pack, *float64, error) {
 	} else {
 		return senmlPack, nil, err
 	}
+}
+
+func iterateOverChannel(timeSeriesCh <-chan tsdb.TimeEntry, resolved bool, seriesName string) (senmlPack senml.Pack) {
+	//Check the data channel
+	firsTime := true
+	var baseTime float64
+
+	for timeEntry := range timeSeriesCh {
+		var timeRecord SenMLDBRecord
+		var curBaseName, curName string
+		var curTime float64
+		var curBaseTime float64
+
+		err := json.Unmarshal(timeEntry.Value, &timeRecord)
+		if err != nil {
+			fmt.Printf("Error while unmarshalling %s", err)
+			continue
+		}
+		if resolved {
+			curName = seriesName
+			curBaseTime = 0
+			curTime = int64ToFloatTime(timeEntry.Time)
+		} else {
+			if firsTime {
+				curBaseName = seriesName
+				baseTime = int64ToFloatTime(timeEntry.Time)
+				curBaseTime = baseTime
+				curTime = 0
+				firsTime = false
+
+			} else {
+				curBaseName = ""
+				curBaseTime = 0
+				curTime = int64ToFloatTime(timeEntry.Time) - baseTime
+			}
+			curName = ""
+		}
+		record := senml.Record{
+			BaseName:    curBaseName,
+			Name:        curName,
+			Unit:        timeRecord.Unit,
+			BaseTime:    curBaseTime,
+			Time:        curTime,
+			UpdateTime:  timeRecord.UpdateTime,
+			Value:       timeRecord.Value,
+			StringValue: timeRecord.StringValue,
+			DataValue:   timeRecord.DataValue,
+			BoolValue:   timeRecord.BoolValue,
+			Sum:         timeRecord.Sum,
+		}
+		senmlPack = append(senmlPack, record)
+	}
+	return senmlPack
 }
 
 func (bdb SenmlDataStore) GetPages(query Query) ([]float64, int, error) {
