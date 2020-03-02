@@ -18,6 +18,17 @@ type SenmlDataStore struct {
 	tsdb tsdb.TSDB
 }
 
+type DenormMask int
+
+const (
+	FName DenormMask = 1 << iota
+	FTime
+	FUnit
+	FValue
+	FSum
+	FVersion
+)
+
 type Query struct {
 	//A comma separated senml names
 	Series string
@@ -33,8 +44,8 @@ type Query struct {
 	//Number of entries to be returned per request. This is used for pagination. The next sequence is found out using NextEntry function
 	MaxEntries int
 
-	//If set to true, then the query result shall be resolved (normalized) senml see https://tools.ietf.org/html/rfc8428#section-4.6
-	Resolved bool
+	//comma separated fields for denormalization (see https://tools.ietf.org/html/rfc8428#section-4.6). Currently only "name" and "time" are supported.
+	Denormalize DenormMask
 }
 
 type SenMLDBRecord struct {
@@ -131,7 +142,7 @@ func (bdb SenmlDataStore) Get(series string) (senml.Pack, error) {
 	var senmlPack senml.Pack
 	timeSeriesCh, errCh := bdb.tsdb.GetOnChannel(series)
 
-	senmlPack = iterateOverChannel(timeSeriesCh, true, series)
+	senmlPack = iterateOverChannel(timeSeriesCh, 0, series)
 	//Check the error channel
 	err := <-errCh
 
@@ -150,10 +161,9 @@ func (bdb SenmlDataStore) Query(query Query) (senml.Pack, *float64, error) {
 		From:       floatTimeToInt64(query.From),
 	}
 
-	resolved := query.Resolved
 	timeSeriesCh, nextEntryCh, errCh := bdb.tsdb.QueryOnChannel(tsQuery)
 
-	senmlPack = iterateOverChannel(timeSeriesCh, resolved, query.Series)
+	senmlPack = iterateOverChannel(timeSeriesCh, query.Denormalize, query.Series)
 	//Check the error channel
 	nextEntry := <-nextEntryCh
 	err := <-errCh
@@ -166,9 +176,8 @@ func (bdb SenmlDataStore) Query(query Query) (senml.Pack, *float64, error) {
 	}
 }
 
-func iterateOverChannel(timeSeriesCh <-chan tsdb.TimeEntry, resolved bool, seriesName string) (senmlPack senml.Pack) {
-	//Check the data channel
-	firsTime := true
+func iterateOverChannel(timeSeriesCh <-chan tsdb.TimeEntry, denormalize DenormMask, seriesName string) (senmlPack senml.Pack) {
+
 	var baseTime float64
 
 	for timeEntry := range timeSeriesCh {
@@ -182,24 +191,31 @@ func iterateOverChannel(timeSeriesCh <-chan tsdb.TimeEntry, resolved bool, serie
 			fmt.Printf("Error while unmarshalling %s", err)
 			continue
 		}
-		if resolved {
-			curName = seriesName
-			curBaseTime = 0
-			curTime = int64ToFloatTime(timeEntry.Time)
-		} else {
-			if firsTime {
+
+		if denormalize&FName != 0 {
+			if senmlPack == nil { //First time
 				curBaseName = seriesName
+			} else {
+				curBaseName = ""
+			}
+			curName = ""
+		} else {
+			curName = seriesName
+
+		}
+
+		if denormalize&FTime != 0 {
+			if senmlPack == nil { //First time
 				baseTime = int64ToFloatTime(timeEntry.Time)
 				curBaseTime = baseTime
 				curTime = 0
-				firsTime = false
-
 			} else {
-				curBaseName = ""
 				curBaseTime = 0
 				curTime = int64ToFloatTime(timeEntry.Time) - baseTime
 			}
-			curName = ""
+		} else {
+			curBaseTime = 0
+			curTime = int64ToFloatTime(timeEntry.Time)
 		}
 		record := senml.Record{
 			BaseName:    curBaseName,

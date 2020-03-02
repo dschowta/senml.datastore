@@ -225,7 +225,7 @@ func TestSenmlDataStore_Query(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	query := Query{Series: seriesName, MaxEntries: 50, From: s[0].Time, To: s[len(s)-1].Time, Sort: ASC, Resolved: true}
+	query := Query{Series: seriesName, MaxEntries: 50, From: s[0].Time, To: s[len(s)-1].Time, Sort: ASC, Denormalize: 0}
 	resSeries, nextEntry, err := datastore.Query(query)
 	if err != nil {
 		t.Fatal(err)
@@ -239,7 +239,7 @@ func TestSenmlDataStore_Query(t *testing.T) {
 	if nextEntry == nil {
 		t.Error("nextEntry is null")
 	}
-	query = Query{Series: seriesName, MaxEntries: 50, From: *nextEntry, To: s[len(s)-1].Time, Sort: ASC, Resolved: true}
+	query = Query{Series: seriesName, MaxEntries: 50, From: *nextEntry, To: s[len(s)-1].Time, Sort: ASC, Denormalize: 0}
 	resSeries, nextEntry, err = datastore.Query(query)
 	if err != nil {
 		t.Fatal(err)
@@ -273,7 +273,7 @@ func TestSenmlDataStore_Query_not_resolved(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	query := Query{Series: seriesName, MaxEntries: 50, From: s[0].Time, To: s[len(s)-1].Time, Sort: ASC, Resolved: false}
+	query := Query{Series: seriesName, MaxEntries: 50, From: s[0].Time, To: s[len(s)-1].Time, Sort: ASC, Denormalize: FName | FTime}
 	resSeries, nextEntry, err := datastore.Query(query)
 	if err != nil {
 		t.Fatal(err)
@@ -288,7 +288,7 @@ func TestSenmlDataStore_Query_not_resolved(t *testing.T) {
 	if nextEntry == nil {
 		t.Error("nextEntry is null")
 	}
-	query = Query{Series: seriesName, MaxEntries: 50, From: *nextEntry, To: s[len(s)-1].Time, Sort: ASC, Resolved: false}
+	query = Query{Series: seriesName, MaxEntries: 50, From: *nextEntry, To: s[len(s)-1].Time, Sort: ASC, Denormalize: FName | FTime}
 	resSeries, nextEntry, err = datastore.Query(query)
 	if err != nil {
 		t.Fatal(err)
