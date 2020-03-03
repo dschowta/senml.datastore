@@ -26,7 +26,6 @@ const (
 	FUnit
 	FValue
 	FSum
-	FVersion
 )
 
 type Query struct {
